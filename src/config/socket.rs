@@ -102,7 +102,7 @@ impl TryFrom<Vec<u8>> for Interface {
 }
 
 /// Builder for a [`SocketConfig`](Config).
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone)]
 pub struct ConfigBuilder {
     config: Config,
 }
@@ -147,21 +147,29 @@ impl ConfigBuilder {
         self
     }
 
+    /// Set a custom XDP program path. Default is None (use libxdp default).
+    pub fn custom_xdp_prog_path(&mut self, path: impl Into<String>) -> &mut Self {
+        self.config.custom_xdp_prog_path = Some(path.into());
+        self
+    }
+
     /// Build a [`SocketConfig`](Config) instance using the values set
     /// in this builder.
     pub fn build(&self) -> Config {
-        self.config
+        self.config.clone()
     }
 }
 
 /// Config for an AF_XDP [`Socket`](crate::Socket) instance.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Config {
     rx_queue_size: QueueSize,
     tx_queue_size: QueueSize,
     libxdp_flags: LibxdpFlags,
     xdp_flags: XdpFlags,
     bind_flags: BindFlags,
+    /// Optional path to a custom BPF program object file
+    pub custom_xdp_prog_path: Option<String>,
 }
 
 impl Config {
@@ -204,6 +212,7 @@ impl Default for Config {
             libxdp_flags: LibxdpFlags::empty(),
             xdp_flags: XdpFlags::empty(),
             bind_flags: BindFlags::empty(),
+            custom_xdp_prog_path: None,
         }
     }
 }

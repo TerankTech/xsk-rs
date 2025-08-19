@@ -121,6 +121,18 @@ impl Socket {
         if_name: &Interface,
         queue_id: u32,
     ) -> Result<(TxQueue, RxQueue, Option<(FillQueue, CompQueue)>), SocketCreateError> {
+        // If a custom XDP program path is provided, we need to handle it specially
+        // For now, we'll just log a warning - full implementation would require
+        // loading the program via libbpf before creating the socket
+        if let Some(ref prog_path) = config.custom_xdp_prog_path {
+            eprintln!("Warning: Custom XDP program path '{}' specified but not yet implemented", prog_path);
+            eprintln!("To use custom BPF program, manually load it with: sudo ip link set dev <interface> xdpgeneric obj {} sec xdp", prog_path);
+            // In a full implementation, we would:
+            // 1. Load the BPF object file
+            // 2. Attach it to the interface
+            // 3. Set XSK_LIBXDP_FLAGS_INHIBIT_PROG_LOAD flag
+        }
+        
         let mut socket_ptr = ptr::null_mut();
         let mut tx_q = XskRingProd::default();
         let mut rx_q = XskRingCons::default();
@@ -140,7 +152,7 @@ impl Socket {
                     tx_q.as_mut(),
                     fq.as_mut().as_mut(), // double deref due to Box
                     cq.as_mut().as_mut(),
-                    &config.into(),
+                    &config.clone().into(),
                 );
 
                 (err, fq, cq)
