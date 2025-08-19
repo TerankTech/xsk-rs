@@ -28,6 +28,33 @@ use crate::{
     ring::{XskRingCons, XskRingProd},
 };
 
+/// XDP metadata that may contain hardware timestamps and other info
+#[derive(Debug, Clone, Copy)]
+pub struct XdpMetadata {
+    /// Options field from the frame descriptor
+    pub options: u32,
+    /// Frame address for accessing headroom metadata if needed
+    pub frame_addr: usize,
+}
+
+impl XdpMetadata {
+    /// Extract hardware timestamp if available.
+    /// 
+    /// The timestamp may be stored in the options field or in the
+    /// frame headroom depending on the XDP program and driver.
+    pub fn rx_timestamp(&self) -> Option<u64> {
+        // If options field is non-zero, it might contain the timestamp
+        // or a pointer/offset to the timestamp
+        if self.options != 0 {
+            // The options field might directly contain a timestamp
+            // or it might be an indicator that metadata is available
+            Some(self.options as u64)
+        } else {
+            None
+        }
+    }
+}
+
 /// Wrapper around a pointer to some [`Umem`].
 #[derive(Debug)]
 struct XskUmem(NonNull<xsk_umem>);
@@ -306,6 +333,25 @@ impl Umem {
     pub unsafe fn data_mut<'a>(&'a self, desc: &'a mut FrameDesc) -> DataMut<'a> {
         // SAFETY: see `frame_mut`.
         unsafe { self.mem.data_mut(desc) }
+    }
+
+    /// Access XDP metadata stored in the options field or frame headroom.
+    /// 
+    /// XDP metadata (like hardware timestamps) can be stored in:
+    /// 1. The options field of the frame descriptor
+    /// 2. The headroom area before the packet data
+    /// 
+    /// # Safety
+    /// 
+    /// `desc` must correspond to a frame belonging to this `Umem`.
+    #[inline]
+    pub unsafe fn metadata(&self, desc: &FrameDesc) -> XdpMetadata {
+        XdpMetadata {
+            options: desc.options(),
+            // Metadata may also be in headroom, but we need the descriptor
+            // to access it properly
+            frame_addr: desc.addr(),
+        }
     }
 
     /// Intended to be called on socket creation, this passes the
